@@ -1,32 +1,40 @@
 # Kode-rs Porting TODO
 
-## Phase 1: Foundation ✅ STARTED
+## Phase 1: Foundation ✅ COMPLETED
 
 ### Project Setup
 - [x] Create porting plan
-- [ ] Initialize Cargo.toml with dependencies
-- [ ] Set up workspace structure
-- [ ] Configure .gitignore
-- [ ] Set up rustfmt.toml and clippy.toml
+- [x] Initialize Cargo.toml with dependencies
+- [x] Set up workspace structure
+- [x] Configure .gitignore
+- [x] Set up rustfmt.toml and clippy.toml
+- [x] Verify project compiles
 
 ### Core Types & Traits
-- [ ] Define Tool trait
-- [ ] Define ToolContext and ExtendedToolContext
-- [ ] Define ValidationResult
-- [ ] Define ToolStreamItem enum
-- [ ] Define Message types
-- [ ] Define Config types
-- [ ] Define Permission types
-- [ ] Define Error types (using thiserror)
+- [x] Define Tool trait
+- [x] Define ToolContext
+- [x] Define ValidationResult
+- [x] Define ToolStreamItem enum
+- [x] Define Message types (Message, UserMessage, AssistantMessage, etc.)
+- [x] Define Config types (Config, GlobalConfig, ProjectConfig)
+- [x] Define Model types (ModelProfile, ModelPointer, ProviderType)
+- [x] Define Error types (using thiserror)
 
 ### Configuration System
-- [ ] Implement Config struct
-- [ ] Implement ModelConfig struct
-- [ ] Implement config loading (TOML)
-- [ ] Implement config merging (global + project + env)
-- [ ] Implement config validation
+- [x] Implement Config struct
+- [x] Implement ModelProfile struct
+- [x] Implement ModelPointer struct
+- [x] Implement config loading (JSON for now, matching TypeScript)
+- [x] Implement config merging (global + project + env)
+- [x] Implement config validation
+- [x] Add tests for config loading/saving
 
-## Phase 2: Services Layer
+### CLI
+- [x] Implement basic CLI structure with clap
+- [x] Add commands: repl, query, config, models, agents, version
+- [x] Verify CLI works (--help, version)
+
+## Phase 2: Services Layer ⏸️ NEXT
 
 ### Model Adapters
 - [ ] Define ModelAdapter trait
@@ -138,14 +146,83 @@
 - [ ] Create binary releases
 - [ ] Publish to crates.io
 
+## Current Progress Summary
+
+### ✅ Completed (Session 1)
+1. **Project Foundation**
+   - Set up Cargo.toml with all required dependencies
+   - Configured rustfmt, clippy, .gitignore
+   - Created module structure: cli, config, error, messages, tools
+
+2. **Core Type System**
+   - Ported Tool trait with async support
+   - Implemented ToolContext, ValidationResult, ToolStreamItem
+   - Created message types (Message, ContentBlock, etc.)
+   - Defined error types with thiserror
+
+3. **Configuration System**
+   - Ported GlobalConfig and ProjectConfig
+   - Implemented ModelProfile and ModelPointer
+   - Added ProviderType enum with 15+ providers
+   - Config loading/saving with tests
+
+4. **CLI**
+   - Implemented argument parsing with clap
+   - Added commands: repl, query, config, models, agents, version
+   - Verified working with --help and version
+
+5. **Build System**
+   - Project compiles successfully
+   - Release build works
+   - Tests included for core modules
+
+### Files Created
+```
+src/
+├── lib.rs              # Library root
+├── main.rs             # Binary entry point
+├── error.rs            # Error types (92 lines)
+├── messages.rs         # Message types (232 lines)
+├── cli/
+│   └── mod.rs          # CLI parsing (98 lines)
+├── config/
+│   ├── mod.rs          # Config module (150 lines)
+│   ├── models.rs       # Model profiles (322 lines)
+│   └── settings.rs     # Global/project settings (327 lines)
+└── tools/
+    └── mod.rs          # Tool trait (262 lines)
+
+agent/
+├── PORTING_PLAN.md     # Comprehensive porting plan (514 lines)
+└── TODO.md             # This file
+```
+
+### Statistics
+- **Total Rust code**: ~1,500 lines
+- **Commits**: 13 commits
+- **Compilation**: ✅ Clean (0 errors, 0 warnings)
+
 ## Current Blockers
 
-None yet.
+None.
 
 ## Next Steps
 
-1. Set up Cargo.toml with all dependencies
-2. Create initial module structure
-3. Define core traits (Tool, ModelAdapter, etc.)
-4. Implement Config system
-5. Implement FileReadTool as first tool
+1. **Implement services layer**
+   - Define ModelAdapter trait
+   - Implement AnthropicAdapter (using reqwest)
+   - Implement OpenAIAdapter
+   - Add streaming support
+
+2. **Implement first tool: FileReadTool**
+   - Input/output types
+   - Line range support
+   - File validation
+   - Tests
+
+3. **Implement core tools**
+   - FileWriteTool
+   - FileEditTool (with diff generation)
+   - BashTool (with streaming output)
+   - GlobTool (using wildmatch)
+   - GrepTool (using regex)
