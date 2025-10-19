@@ -5,6 +5,7 @@
 
 pub mod file_read;
 pub mod file_write;
+pub mod file_edit;
 
 use std::{collections::HashMap, path::PathBuf, pin::Pin};
 
