@@ -539,7 +539,7 @@ mod tests {
 
         let mut stream = tool.call(input, ctx).await.unwrap();
 
-        if let Some(Ok(ToolStreamItem::Result { data, .. })) = stream.next().await {
+        if let Some(Ok(ToolStreamItem::Result { data: _, .. })) = stream.next().await {
             assert!(file_path.exists());
 
             let written_content = fs::read_to_string(&file_path).unwrap();
