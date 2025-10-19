@@ -1,7 +1,7 @@
 ///! Message rendering
 
 use crate::{
-    messages::{ContentBlock, Message},
+    messages::{ContentBlock, Role},
     tui::app::App,
 };
 use ratatui::{
@@ -18,8 +18,8 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
 
     // Add messages
     for msg in app.messages() {
-        match msg {
-            Message::User(user_msg) => {
+        match msg.role {
+            Role::User => {
                 // User message header
                 lines.push(Line::from(vec![
                     Span::styled(
@@ -28,11 +28,11 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
                             .fg(Color::Blue)
                             .add_modifier(Modifier::BOLD),
                     ),
-                    Span::raw(&user_msg.content),
+                    Span::raw(msg.text_content()),
                 ]));
                 lines.push(Line::from("")); // Empty line for spacing
             }
-            Message::Assistant(asst_msg) => {
+            Role::Assistant => {
                 // Assistant message header
                 lines.push(Line::from(Span::styled(
                     "Assistant:",
@@ -42,15 +42,15 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
                 )));
 
                 // Content blocks
-                for block in &asst_msg.message.content {
+                for block in &msg.content {
                     match block {
-                        ContentBlock::Text(text) => {
+                        ContentBlock::Text { text } => {
                             // Split text into lines
-                            for line in text.text.lines() {
+                            for line in text.lines() {
                                 lines.push(Line::from(line.to_string()));
                             }
                         }
-                        ContentBlock::Thinking(thinking) => {
+                        ContentBlock::Thinking { thinking } => {
                             lines.push(Line::from(vec![
                                 Span::styled(
                                     "[Thinking] ",
@@ -59,43 +59,52 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
                                         .add_modifier(Modifier::ITALIC),
                                 ),
                                 Span::styled(
-                                    &thinking.thinking,
+                                    thinking,
                                     Style::default().add_modifier(Modifier::ITALIC),
                                 ),
                             ]));
                         }
-                        ContentBlock::ToolUse(tool_use) => {
+                        ContentBlock::ToolUse { id: _, name, input } => {
                             lines.push(Line::from(vec![
                                 Span::styled(
                                     "[Tool: ",
                                     Style::default().fg(Color::Magenta),
                                 ),
                                 Span::styled(
-                                    &tool_use.name,
+                                    name,
                                     Style::default()
                                         .fg(Color::Magenta)
                                         .add_modifier(Modifier::BOLD),
                                 ),
                                 Span::styled("] ", Style::default().fg(Color::Magenta)),
                                 Span::raw(
-                                    serde_json::to_string(&tool_use.input)
+                                    serde_json::to_string(input)
                                         .unwrap_or_else(|_| "{}".to_string()),
                                 ),
                             ]));
                         }
-                        ContentBlock::ToolResult(tool_result) => {
+                        ContentBlock::ToolResult {
+                            tool_use_id: _,
+                            content,
+                            is_error,
+                        } => {
+                            let color = if is_error.unwrap_or(false) {
+                                Color::Red
+                            } else {
+                                Color::Cyan
+                            };
                             lines.push(Line::from(vec![
-                                Span::styled(
-                                    "[Result] ",
-                                    Style::default().fg(Color::Cyan),
-                                ),
-                                Span::raw(&tool_result.content),
+                                Span::styled("[Result] ", Style::default().fg(color)),
+                                Span::raw(content),
                             ]));
                         }
                     }
                 }
 
                 lines.push(Line::from("")); // Empty line for spacing
+            }
+            Role::System => {
+                // System messages are usually not displayed in the UI
             }
         }
     }

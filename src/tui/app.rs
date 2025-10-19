@@ -5,8 +5,8 @@
 use crate::{
     config::models::ModelProfile,
     error::{KodeError, Result},
-    messages::{AssistantMessage, ContentBlock, InternalMessage, Message, UserMessage},
-    services::{CompletionChunk, ModelAdapter, Usage},
+    messages::{ContentBlock, Message, Role},
+    services::{CompletionChunk, CompletionOptions, ModelAdapter},
 };
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use futures::StreamExt;
@@ -186,23 +186,15 @@ impl App {
         let user_content = self.input_buffer.clone();
         self.input_buffer.clear();
 
-        let user_message = Message::User(UserMessage {
-            content: user_content.clone(),
-        });
+        let user_message = Message::user(user_content.clone());
         self.messages.push(user_message);
 
-        // Create empty assistant message
-        let assistant_message = Message::Assistant(AssistantMessage {
-            id: uuid::Uuid::new_v4().to_string(),
-            model: self.model_profile.name.clone(),
-            role: "assistant".to_string(),
-            stop_reason: None,
-            stop_sequence: None,
-            usage: Usage::default(),
-            message: InternalMessage {
-                content: Vec::new(),
-            },
-        });
+        // Create empty assistant message (will be filled by streaming)
+        let assistant_message = Message {
+            role: Role::Assistant,
+            content: Vec::new(),
+            uuid: Some(uuid::Uuid::new_v4()),
+        };
         self.messages.push(assistant_message);
 
         // Start streaming
@@ -215,15 +207,8 @@ impl App {
     async fn start_streaming(&mut self, _prompt: String) -> Result<()> {
         self.is_loading = true;
 
-        // Convert messages to API format
-        let api_messages = self
-            .messages
-            .iter()
-            .filter_map(|msg| match msg {
-                Message::User(user_msg) => Some(Message::User(user_msg.clone())),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
+        // Use all messages except the empty assistant message we just added
+        let api_messages = self.messages[..self.messages.len().saturating_sub(1)].to_vec();
 
         // Get tool schemas (empty for now)
         let tools = Vec::new();
@@ -231,10 +216,14 @@ impl App {
         // Start streaming
         let event_tx = self.event_tx.clone();
         let adapter = self.adapter.clone();
-        let model_profile = self.model_profile.clone();
+        let _model_profile = self.model_profile.clone();
+
+        // TODO: Get system prompt from config or agent
+        let system_prompt = None;
+        let options = CompletionOptions::default();
 
         let stream = adapter
-            .stream_complete(api_messages, tools, &model_profile)
+            .stream_complete(api_messages, tools, system_prompt, options)
             .await?;
 
         let handle = tokio::spawn(async move {
@@ -284,9 +273,7 @@ impl App {
                 self.is_loading = false;
                 self.current_stream = None;
                 // Add error message
-                let error_msg = Message::User(UserMessage {
-                    content: format!("Error: {}", err),
-                });
+                let error_msg = Message::user(format!("Error: {}", err));
                 self.messages.push(error_msg);
             }
         }
@@ -297,45 +284,49 @@ impl App {
     /// Handle streaming chunk
     fn handle_stream_chunk(&mut self, chunk: CompletionChunk) -> Result<()> {
         // Get the last message (should be assistant message)
-        if let Some(Message::Assistant(ref mut asst_msg)) = self.messages.last_mut() {
-            match chunk {
-                CompletionChunk::TextDelta { delta, .. } => {
-                    // Append to last text block or create new one
-                    if let Some(ContentBlock::Text(ref mut text)) =
-                        asst_msg.message.content.last_mut()
-                    {
-                        text.push_str(&delta);
-                    } else {
-                        asst_msg
-                            .message
-                            .content
-                            .push(ContentBlock::Text(delta));
+        if let Some(msg) = self.messages.last_mut() {
+            if msg.role == Role::Assistant {
+                match chunk {
+                    CompletionChunk::TextDelta { text } => {
+                        // Append to last text block or create new one
+                        if let Some(ContentBlock::Text { text: ref mut current }) =
+                            msg.content.last_mut()
+                        {
+                            current.push_str(&text);
+                        } else {
+                            msg.content.push(ContentBlock::Text { text });
+                        }
                     }
-                }
-                CompletionChunk::ThinkingDelta { delta, .. } => {
-                    // Append to last thinking block or create new one
-                    if let Some(ContentBlock::Thinking(ref mut thinking)) =
-                        asst_msg.message.content.last_mut()
-                    {
-                        thinking.push_str(&delta);
-                    } else {
-                        asst_msg
-                            .message
-                            .content
-                            .push(ContentBlock::Thinking(delta));
+                    CompletionChunk::ThinkingDelta { thinking } => {
+                        // Append to last thinking block or create new one
+                        if let Some(ContentBlock::Thinking {
+                            thinking: ref mut current,
+                        }) = msg.content.last_mut()
+                        {
+                            current.push_str(&thinking);
+                        } else {
+                            msg.content.push(ContentBlock::Thinking { thinking });
+                        }
                     }
-                }
-                CompletionChunk::ToolUseComplete { tool_use } => {
-                    asst_msg
-                        .message
-                        .content
-                        .push(ContentBlock::ToolUse(tool_use));
-                }
-                CompletionChunk::Done {
-                    stop_reason, usage, ..
-                } => {
-                    asst_msg.stop_reason = stop_reason;
-                    asst_msg.usage = usage;
+                    CompletionChunk::ToolUseStart { .. } => {
+                        // Tool use started - will be completed later
+                    }
+                    CompletionChunk::ToolInputDelta { .. } => {
+                        // Tool input accumulating - will be completed later
+                    }
+                    CompletionChunk::ToolUseComplete { id, name, input } => {
+                        msg.content.push(ContentBlock::ToolUse { id, name, input });
+                    }
+                    CompletionChunk::Done { .. } => {
+                        // Done - nothing to do for now
+                        // In a full implementation, we would store stop_reason and usage
+                    }
+                    CompletionChunk::Error { message } => {
+                        // Add error as text
+                        msg.content.push(ContentBlock::Text {
+                            text: format!("Error: {}", message),
+                        });
+                    }
                 }
             }
         }

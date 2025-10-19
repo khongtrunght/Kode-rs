@@ -12,14 +12,10 @@ use ratatui::{
 pub fn render(f: &mut Frame, area: Rect, app: &App) {
     let mode_str = match app.input_mode() {
         InputMode::Prompt => "Prompt",
-        InputMode::Bash => "Bash",
-        InputMode::Koding => "Koding",
     };
 
     let mode_color = match app.input_mode() {
         InputMode::Prompt => Color::Green,
-        InputMode::Bash => Color::Yellow,
-        InputMode::Koding => Color::Magenta,
     };
 
     let input = Paragraph::new(app.input_buffer())
