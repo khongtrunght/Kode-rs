@@ -8,6 +8,7 @@ pub mod file_write;
 pub mod file_edit;
 pub mod bash;
 pub mod glob;
+pub mod grep;
 
 use std::{collections::HashMap, path::PathBuf, pin::Pin};
 
