@@ -13,6 +13,7 @@ pub mod error;
 pub mod messages;
 pub mod services;
 pub mod tools;
+pub mod tui;
 
 // Re-exports for convenience
 pub use error::{KodeError, Result};
