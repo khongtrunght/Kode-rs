@@ -5,6 +5,8 @@
 //! - OpenAI-compatible endpoints (Ollama, LM Studio, etc.)
 
 use async_trait::async_trait;
+use bytes::Bytes;
+use futures::stream::{Stream, StreamExt};
 use reqwest::{header, Client};
 use serde::{Deserialize, Serialize};
 
@@ -14,7 +16,11 @@ use crate::{
     messages::{ContentBlock, Message, Role},
 };
 
-use super::{CompletionOptions, CompletionResponse, CompletionStream, ModelAdapter, ToolSchema, Usage};
+use super::{
+    streaming::OpenAIStreamHandler,
+    CompletionChunk, CompletionOptions, CompletionResponse, CompletionStream, ModelAdapter,
+    ToolSchema, Usage,
+};
 
 /// OpenAI API adapter
 pub struct OpenAIAdapter {
@@ -134,6 +140,82 @@ impl OpenAIAdapter {
             })
             .collect()
     }
+
+    /// Process SSE byte stream into CompletionChunks
+    fn process_stream(
+        byte_stream: impl Stream<Item = reqwest::Result<Bytes>> + Send + 'static,
+    ) -> impl Stream<Item = Result<CompletionChunk>> + Send + 'static {
+        async_stream::stream! {
+            let mut handler = OpenAIStreamHandler::new();
+            let mut byte_stream = Box::pin(byte_stream);
+
+            while let Some(chunk_result) = byte_stream.next().await {
+                match chunk_result {
+                    Ok(bytes) => {
+                        // Parse SSE events from bytes
+                        let text = match std::str::from_utf8(&bytes) {
+                            Ok(t) => t,
+                            Err(e) => {
+                                yield Err(KodeError::Other(format!("Invalid UTF-8 in stream: {}", e)));
+                                continue;
+                            }
+                        };
+
+                        // Process the chunk
+                        match handler.process_chunk(text) {
+                            Ok(done) => {
+                                if done {
+                                    break;
+                                }
+                            }
+                            Err(e) => {
+                                yield Err(e);
+                                break;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        yield Err(KodeError::NetworkError(e.to_string()));
+                        break;
+                    }
+                }
+            }
+
+            // Get final message and emit done event
+            match handler.get_message() {
+                Ok(assistant_message) => {
+                    // Extract content blocks from the message
+                    for block in &assistant_message.message.content {
+                        match block {
+                            ContentBlock::Text { text } => {
+                                yield Ok(CompletionChunk::TextDelta { text: text.clone() });
+                            }
+                            ContentBlock::Thinking { thinking } => {
+                                yield Ok(CompletionChunk::ThinkingDelta { thinking: thinking.clone() });
+                            }
+                            ContentBlock::ToolUse { id, name, input } => {
+                                yield Ok(CompletionChunk::ToolUseComplete {
+                                    id: id.clone(),
+                                    name: name.clone(),
+                                    input: input.clone(),
+                                });
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    // Emit done event with usage stats
+                    yield Ok(CompletionChunk::Done {
+                        stop_reason: handler.get_finish_reason().unwrap_or_else(|| "stop".to_string()),
+                        usage: Some(handler.get_usage()),
+                    });
+                }
+                Err(e) => {
+                    yield Err(e);
+                }
+            }
+        }
+    }
 }
 
 #[async_trait]
@@ -249,14 +331,64 @@ impl ModelAdapter for OpenAIAdapter {
 
     async fn stream_complete(
         &self,
-        _messages: Vec<Message>,
-        _tools: Vec<ToolSchema>,
-        _system_prompt: Option<String>,
-        _options: CompletionOptions,
+        messages: Vec<Message>,
+        tools: Vec<ToolSchema>,
+        system_prompt: Option<String>,
+        options: CompletionOptions,
     ) -> Result<CompletionStream> {
-        Err(KodeError::NotImplemented(
-            "OpenAI streaming not yet implemented".to_string(),
-        ))
+        let mut openai_messages = Vec::new();
+
+        // Add system message if provided
+        if let Some(system) = system_prompt {
+            openai_messages.push(OpenAIMessage {
+                role: "system".to_string(),
+                content: Some(system),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            });
+        }
+
+        // Add converted messages
+        openai_messages.extend(self.convert_messages(messages));
+
+        let request = OpenAIRequest {
+            model: self.profile.model_name.clone(),
+            messages: openai_messages,
+            temperature: options.temperature,
+            max_tokens: options.max_tokens,
+            top_p: options.top_p,
+            stop: options.stop_sequences,
+            tools: if tools.is_empty() {
+                None
+            } else {
+                Some(self.convert_tools(tools))
+            },
+            tool_choice: None,
+            stream: Some(true),
+        };
+
+        let response = self
+            .client
+            .post(format!("{}/chat/completions", self.base_url))
+            .json(&request)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await?;
+            return Err(KodeError::ApiError {
+                provider: "openai".to_string(),
+                message: format!("HTTP {}: {}", status, error_text),
+            });
+        }
+
+        // Create SSE stream
+        let byte_stream = response.bytes_stream();
+        let stream = Self::process_stream(byte_stream);
+
+        Ok(Box::pin(stream))
     }
 
     fn max_context_tokens(&self) -> u32 {

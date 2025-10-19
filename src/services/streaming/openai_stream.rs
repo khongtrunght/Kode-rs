@@ -241,6 +241,21 @@ impl OpenAIStreamHandler {
     pub fn get_current_text(&self) -> &str {
         &self.text_content
     }
+
+    /// Get the finish reason
+    pub fn get_finish_reason(&self) -> Option<String> {
+        self.finish_reason.clone()
+    }
+
+    /// Get accumulated usage statistics
+    pub fn get_usage(&self) -> Usage {
+        self.usage.clone().unwrap_or(Usage {
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: None,
+        })
+    }
 }
 
 impl Default for OpenAIStreamHandler {
