@@ -50,15 +50,15 @@
 - [ ] Implement server discovery
 - [ ] Implement tool schema parsing
 
-## Phase 3: Core Tools (Priority 1) ⏸️ IN PROGRESS
+## Phase 3: Core Tools (Priority 1) ✅ COMPLETED
 
 - [x] FileReadTool (with line range support)
 - [x] FileWriteTool (create files with validation)
 - [x] FileEditTool (diff-based editing with uniqueness checks)
 - [x] BashTool (command execution with timeout and banned command checks)
-- [ ] GlobTool (file pattern matching)
-- [ ] GrepTool (content search with ripgrep-style)
-- [ ] lsTool (directory listing)
+- [x] GlobTool (file pattern matching)
+- [x] GrepTool (content search with ripgrep-style)
+- [ ] lsTool (directory listing - optional, glob/grep cover most use cases)
 
 ## Phase 4: Advanced Tools (Priority 2)
 
@@ -147,6 +147,35 @@
 - [ ] Set up GitHub Actions for CI/CD
 - [ ] Create binary releases
 - [ ] Publish to crates.io
+
+## Recent Progress (Session 4)
+
+### ✅ Search Tools Completed
+1. **GlobTool**
+   - File pattern matching with wildcard support
+   - Support for glob patterns like "**/*.js" or "src/**/*.ts"
+   - Results sorted by modification time
+   - Limit to 100 files with truncation flag
+   - Full test coverage (4 tests passing)
+
+2. **GrepTool**
+   - Fast content search using ripgrep subprocess
+   - Support for regex patterns (case-insensitive by default)
+   - File filtering with glob patterns (--glob)
+   - Results sorted by modification time
+   - Full test coverage (4 tests passing)
+
+### Files Added (Session 4)
+```
+src/tools/
+├── glob.rs                # GlobTool (429 lines)
+└── grep.rs                # GrepTool (467 lines)
+```
+
+### Statistics (Session 4)
+- **New Rust code**: ~900 lines
+- **Commits**: 2 commits
+- **Tests**: 8 new tests (all passing)
 
 ## Recent Progress (Session 3)
 
