@@ -13,6 +13,7 @@ pub mod memory_read;
 pub mod memory_write;
 pub mod think;
 pub mod todo_write;
+pub mod url_fetcher;
 
 use std::{collections::HashMap, path::PathBuf, pin::Pin};
 
