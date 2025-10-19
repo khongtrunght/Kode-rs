@@ -31,8 +31,28 @@ pub enum KodeError {
     ToolValidation(String),
 
     /// API error (Anthropic, OpenAI, etc.)
-    #[error("API error: {0}")]
-    Api(String),
+    #[error("API error from {provider}: {message}")]
+    ApiError { provider: String, message: String },
+
+    /// Missing API key
+    #[error("Missing API key for {provider}")]
+    MissingApiKey { provider: String },
+
+    /// Invalid config
+    #[error("Invalid configuration: {0}")]
+    InvalidConfig(String),
+
+    /// Unsupported provider
+    #[error("Unsupported provider: {provider}")]
+    UnsupportedProvider { provider: String },
+
+    /// Network error
+    #[error("Network error: {0}")]
+    NetworkError(String),
+
+    /// Not implemented yet
+    #[error("Not implemented: {0}")]
+    NotImplemented(String),
 
     /// HTTP request error
     #[error("HTTP error: {0}")]

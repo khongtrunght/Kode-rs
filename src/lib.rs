@@ -10,6 +10,7 @@ pub mod cli;
 pub mod config;
 pub mod error;
 pub mod messages;
+pub mod services;
 pub mod tools;
 
 // Re-exports for convenience
