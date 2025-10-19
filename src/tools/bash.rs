@@ -369,6 +369,7 @@ mod tests {
             cwd: std::env::current_dir().unwrap(),
             read_file_timestamps: HashMap::new(),
             safe_mode: false,
+            agent_id: None,
         };
 
         let mut stream = tool.call(input, ctx).await.unwrap();
@@ -395,6 +396,7 @@ mod tests {
             cwd: std::env::current_dir().unwrap(),
             read_file_timestamps: HashMap::new(),
             safe_mode: false,
+            agent_id: None,
         };
 
         let result = tool.validate_input(&input, &ctx).await;
@@ -414,6 +416,7 @@ mod tests {
             cwd: std::env::current_dir().unwrap(),
             read_file_timestamps: HashMap::new(),
             safe_mode: false,
+            agent_id: None,
         };
 
         let mut stream = tool.call(input, ctx).await.unwrap();

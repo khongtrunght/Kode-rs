@@ -3,13 +3,15 @@
 //! Allows agents to write to persistent memory files stored per-agent.
 //! Memory files are stored in ~/.kode/memory/agents/{agent_id}/
 
+use async_stream::stream;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
 
 use crate::error::{KodeError, Result};
-use crate::tools::{Tool, ToolContext, ToolStreamItem, ValidationResult};
+use crate::tools::{Tool, ToolContext, ToolStream, ToolStreamItem, ValidationResult};
 
 /// Input for MemoryWriteTool
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,7 +49,7 @@ impl Tool for MemoryWriteTool {
     type Input = MemoryWriteInput;
     type Output = MemoryWriteOutput;
 
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "MemoryWrite"
     }
 
@@ -55,56 +57,105 @@ impl Tool for MemoryWriteTool {
         "Write to agent memory storage. Memory files are persisted across sessions.".to_string()
     }
 
+    fn input_schema(&self) -> Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "Path to the memory file to write (relative to agent memory directory)"
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Content to write to the file"
+                }
+            },
+            "required": ["file_path", "content"]
+        })
+    }
+
+    async fn prompt(&self, _safe_mode: bool) -> String {
+        "Use this tool to write to agent memory storage. Memory files are persisted across sessions and stored per-agent.".to_string()
+    }
+
     fn is_read_only(&self) -> bool {
         false
     }
 
-    fn needs_permissions(&self) -> bool {
-        false
+    fn needs_permissions(&self, _input: &Self::Input) -> bool {
+        true
     }
 
-    async fn validate(
+    async fn validate_input(
         &self,
         input: &Self::Input,
         context: &ToolContext,
-    ) -> Result<ValidationResult> {
+    ) -> ValidationResult {
         let agent_id = context.agent_id.as_deref().unwrap_or("default");
-        let memory_dir = Self::get_agent_memory_dir(agent_id)?;
-        let full_path = memory_dir.join(&input.file_path);
+        let memory_dir = match Self::get_agent_memory_dir(agent_id) {
+            Ok(dir) => dir,
+            Err(e) => return ValidationResult::error(format!("Failed to get memory directory: {}", e)),
+        };
 
-        // Security: ensure the path is within the memory directory
-        if !full_path.starts_with(&memory_dir) {
-            return Ok(ValidationResult {
-                is_valid: false,
-                message: Some("Invalid memory file path".to_string()),
-            });
+        // Security: check for path traversal attempts
+        if input.file_path.contains("..") || input.file_path.starts_with('/') {
+            return ValidationResult::error("Invalid memory file path");
         }
 
-        Ok(ValidationResult {
-            is_valid: true,
-            message: None,
-        })
-    }
-
-    async fn execute(
-        &self,
-        input: &Self::Input,
-        context: &ToolContext,
-    ) -> Result<ToolStreamItem<Self::Output>> {
-        let agent_id = context.agent_id.as_deref().unwrap_or("default");
-        let memory_dir = Self::get_agent_memory_dir(agent_id)?;
         let full_path = memory_dir.join(&input.file_path);
 
-        // Create parent directories if they don't exist
+        // Double-check the path is within memory_dir (before file creation)
+        // We can't canonicalize a non-existent file, so check the parent
         if let Some(parent) = full_path.parent() {
-            fs::create_dir_all(parent)?;
+            if parent.exists() {
+                if let Ok(canonical_parent) = parent.canonicalize() {
+                    if !canonical_parent.starts_with(&memory_dir) {
+                        return ValidationResult::error("Invalid memory file path");
+                    }
+                }
+            }
         }
 
-        // Write the file
-        fs::write(&full_path, &input.content)?;
+        ValidationResult::ok()
+    }
 
-        Ok(ToolStreamItem::Result(MemoryWriteOutput {
-            message: format!("Saved to {}", input.file_path),
+    async fn call(
+        &self,
+        input: Self::Input,
+        context: ToolContext,
+    ) -> Result<ToolStream<Self::Output>> {
+        Ok(Box::pin(stream! {
+            let agent_id = context.agent_id.as_deref().unwrap_or("default");
+            let memory_dir = match Self::get_agent_memory_dir(agent_id) {
+                Ok(dir) => dir,
+                Err(e) => {
+                    yield Err(e);
+                    return;
+                }
+            };
+
+            let full_path = memory_dir.join(&input.file_path);
+
+            // Create parent directories if they don't exist
+            if let Some(parent) = full_path.parent() {
+                if let Err(e) = fs::create_dir_all(parent) {
+                    yield Err(e.into());
+                    return;
+                }
+            }
+
+            // Write the file
+            if let Err(e) = fs::write(&full_path, &input.content) {
+                yield Err(e.into());
+                return;
+            }
+
+            yield Ok(ToolStreamItem::Result {
+                data: MemoryWriteOutput {
+                    message: format!("Saved to {}", input.file_path),
+                },
+                result_for_assistant: None,
+            });
         }))
     }
 }
@@ -112,8 +163,6 @@ impl Tool for MemoryWriteTool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use tempfile::TempDir;
 
     #[tokio::test]
     async fn test_memory_write_basic() {
@@ -122,7 +171,12 @@ mod tests {
         // Tool properties
         assert_eq!(tool.name(), "MemoryWrite");
         assert!(!tool.is_read_only());
-        assert!(!tool.needs_permissions());
+
+        let input = MemoryWriteInput {
+            file_path: "test.txt".to_string(),
+            content: "content".to_string(),
+        };
+        assert!(tool.needs_permissions(&input));
     }
 
     #[tokio::test]
@@ -137,8 +191,8 @@ mod tests {
             ..Default::default()
         };
 
-        let result = tool.validate(&input, &context).await.unwrap();
-        assert!(!result.valid);
+        let result = tool.validate_input(&input, &context).await;
+        assert!(!result.is_valid);
         assert!(result.message.unwrap().contains("Invalid"));
     }
 
@@ -154,8 +208,8 @@ mod tests {
             ..Default::default()
         };
 
-        let result = tool.validate(&input, &context).await.unwrap();
-        assert!(result.valid);
+        let result = tool.validate_input(&input, &context).await;
+        assert!(result.is_valid);
     }
 
     #[tokio::test]

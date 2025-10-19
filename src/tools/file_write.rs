@@ -330,6 +330,7 @@ mod tests {
             cwd: temp_dir.path().to_path_buf(),
             read_file_timestamps: HashMap::new(),
             safe_mode: false,
+            agent_id: None,
         };
 
         let mut stream = tool.call(input, ctx).await.unwrap();
@@ -373,6 +374,7 @@ mod tests {
             cwd: temp_dir.path().to_path_buf(),
             read_file_timestamps: read_timestamps,
             safe_mode: false,
+            agent_id: None,
         };
 
         let mut stream = tool.call(input, ctx).await.unwrap();
@@ -401,6 +403,7 @@ mod tests {
             cwd: PathBuf::from("/tmp"),
             read_file_timestamps: HashMap::new(),
             safe_mode: false,
+            agent_id: None,
         };
 
         let result = tool.validate_input(&input, &ctx).await;
@@ -424,6 +427,7 @@ mod tests {
             cwd: temp_dir.path().to_path_buf(),
             read_file_timestamps: HashMap::new(), // File not read
             safe_mode: false,
+            agent_id: None,
         };
 
         let result = tool.validate_input(&input, &ctx).await;

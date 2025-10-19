@@ -3,13 +3,15 @@
 //! Allows agents to read from persistent memory files stored per-agent.
 //! Memory files are stored in ~/.kode/memory/agents/{agent_id}/
 
+use async_stream::stream;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::error::{KodeError, Result};
-use crate::tools::{Tool, ToolContext, ToolStreamItem, ValidationResult};
+use crate::tools::{Tool, ToolContext, ToolStream, ToolStreamItem, ValidationResult};
 
 /// Input for MemoryReadTool
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,95 +79,150 @@ impl Tool for MemoryReadTool {
         true
     }
 
-    fn needs_permissions(&self) -> bool {
+    fn needs_permissions(&self, _input: &Self::Input) -> bool {
         false
     }
 
-    async fn validate(
+    fn input_schema(&self) -> Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "Optional path to a specific memory file to read. If not provided, returns the index and list of all memory files."
+                }
+            }
+        })
+    }
+
+    async fn prompt(&self, _safe_mode: bool) -> String {
+        "Use this tool to read from agent memory storage. Memory files are persisted across sessions and stored per-agent.".to_string()
+    }
+
+    async fn validate_input(
         &self,
         input: &Self::Input,
         context: &ToolContext,
-    ) -> Result<ValidationResult> {
+    ) -> ValidationResult {
         let agent_id = context.agent_id.as_deref().unwrap_or("default");
-        let memory_dir = Self::get_agent_memory_dir(agent_id)?;
+        let memory_dir = match Self::get_agent_memory_dir(agent_id) {
+            Ok(dir) => dir,
+            Err(e) => return ValidationResult::error(format!("Failed to get memory directory: {}", e)),
+        };
 
         if let Some(file_path) = &input.file_path {
+            // Security: check for path traversal attempts
+            if file_path.contains("..") || file_path.starts_with('/') {
+                return ValidationResult::error("Invalid memory file path");
+            }
+
             let full_path = memory_dir.join(file_path);
 
-            // Security: ensure the path is within the memory directory
-            if !full_path.starts_with(&memory_dir) {
-                return Ok(ValidationResult {
-                    valid: false,
-                    message: Some("Invalid memory file path".to_string()),
-                });
+            // Double-check the canonical path is within memory_dir
+            if let Ok(canonical) = full_path.canonicalize() {
+                if !canonical.starts_with(&memory_dir) {
+                    return ValidationResult::error("Invalid memory file path");
+                }
             }
 
             // Check if file exists
             if !full_path.exists() {
-                return Ok(ValidationResult {
-                    is_valid: false,
-                    message: Some("Memory file does not exist".to_string()),
-                });
+                return ValidationResult::error("Memory file does not exist");
             }
         }
 
-        Ok(ValidationResult {
-            is_valid: true,
-            message: None,
-        })
+        ValidationResult::ok()
     }
 
-    async fn execute(
+    async fn call(
         &self,
-        input: &Self::Input,
-        context: &ToolContext,
-    ) -> Result<ToolStreamItem<Self::Output>> {
-        let agent_id = context.agent_id.as_deref().unwrap_or("default");
-        let memory_dir = Self::get_agent_memory_dir(agent_id)?;
+        input: Self::Input,
+        context: ToolContext,
+    ) -> Result<ToolStream<Self::Output>> {
+        Ok(Box::pin(stream! {
+            let agent_id = context.agent_id.as_deref().unwrap_or("default");
+            let memory_dir = match Self::get_agent_memory_dir(agent_id) {
+                Ok(dir) => dir,
+                Err(e) => {
+                    yield Err(e);
+                    return;
+                }
+            };
 
-        // Ensure the directory exists
-        fs::create_dir_all(&memory_dir)?;
-
-        // If a specific file is requested, return its contents
-        if let Some(file_path) = &input.file_path {
-            let full_path = memory_dir.join(file_path);
-
-            if !full_path.exists() {
-                return Err(KodeError::FileNotFound(full_path));
+            // Ensure the directory exists
+            if let Err(e) = fs::create_dir_all(&memory_dir) {
+                yield Err(e.into());
+                return;
             }
 
-            let content = fs::read_to_string(&full_path)?;
+            // If a specific file is requested, return its contents
+            if let Some(file_path) = &input.file_path {
+                let full_path = memory_dir.join(file_path);
 
-            return Ok(ToolStreamItem::Result(MemoryReadOutput { content }));
-        }
+                if !full_path.exists() {
+                    yield Err(KodeError::FileNotFound(full_path));
+                    return;
+                }
 
-        // Otherwise, return the index and file list
-        let index_path = memory_dir.join("index.md");
-        let index = if index_path.exists() {
-            fs::read_to_string(&index_path)?
-        } else {
-            String::new()
-        };
+                let content = match fs::read_to_string(&full_path) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        yield Err(e.into());
+                        return;
+                    }
+                };
 
-        let files = Self::list_memory_files(&memory_dir)?;
-        let file_list = if files.is_empty() {
-            "No memory files found.".to_string()
-        } else {
-            files
-                .iter()
-                .map(|f| format!("- {}", f.display()))
-                .collect::<Vec<_>>()
-                .join("\n")
-        };
+                yield Ok(ToolStreamItem::Result {
+                    data: MemoryReadOutput { content },
+                    result_for_assistant: None,
+                });
+                return;
+            }
 
-        let content = format!(
-            "Here are the contents of the agent memory file, `{}`:\n```\n{}\n```\n\nFiles in the agent memory directory:\n{}",
-            index_path.display(),
-            index,
-            file_list
-        );
+            // Otherwise, return the index and file list
+            let index_path = memory_dir.join("index.md");
+            let index = if index_path.exists() {
+                match fs::read_to_string(&index_path) {
+                    Ok(i) => i,
+                    Err(e) => {
+                        yield Err(e.into());
+                        return;
+                    }
+                }
+            } else {
+                String::new()
+            };
 
-        Ok(ToolStreamItem::Result(MemoryReadOutput { content }))
+            let files = match Self::list_memory_files(&memory_dir) {
+                Ok(f) => f,
+                Err(e) => {
+                    yield Err(e);
+                    return;
+                }
+            };
+
+            let file_list = if files.is_empty() {
+                "No memory files found.".to_string()
+            } else {
+                files
+                    .iter()
+                    .map(|f| format!("- {}", f.display()))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            };
+
+            let content = format!(
+                "Here are the contents of the agent memory file, `{}`:\n```\n{}\n```\n\nFiles in the agent memory directory:\n{}",
+                index_path.display(),
+                index,
+                file_list
+            );
+
+            yield Ok(ToolStreamItem::Result {
+                data: MemoryReadOutput { content },
+                result_for_assistant: None,
+            });
+        }))
     }
 }
 
@@ -213,13 +270,13 @@ mod tests {
         // Validation check
         assert_eq!(tool.name(), "MemoryRead");
         assert!(tool.is_read_only());
-        assert!(!tool.needs_permissions());
+        assert!(!tool.needs_permissions(&input));
     }
 
     #[tokio::test]
     async fn test_memory_read_list_files() {
         let tool = MemoryReadTool;
-        let input = MemoryReadInput { file_path: None };
+        let _input = MemoryReadInput { file_path: None };
 
         // Should list all files in the memory directory
         assert_eq!(tool.name(), "MemoryRead");
@@ -236,8 +293,8 @@ mod tests {
             ..Default::default()
         };
 
-        let result = tool.validate(&input, &context).await.unwrap();
-        assert!(!result.valid);
+        let result = tool.validate_input(&input, &context).await;
+        assert!(!result.is_valid);
         assert!(result.message.unwrap().contains("Invalid"));
     }
 
