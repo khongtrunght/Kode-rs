@@ -9,7 +9,7 @@
 pub mod models;
 pub mod settings;
 
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
@@ -17,9 +17,7 @@ pub use self::{
     models::{ModelConfig, ModelPointer, ModelPointerType, ModelProfile, ProviderType},
     settings::{GlobalConfig, ProjectConfig},
 };
-use crate::{
-    error::{KodeError, Result},
-};
+use crate::error::Result;
 
 /// Main configuration structure combining global and project settings
 #[derive(Debug, Clone, Serialize, Deserialize)]

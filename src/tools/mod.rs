@@ -124,8 +124,8 @@ pub type ToolStream<T> = Pin<Box<dyn Stream<Item = Result<ToolStreamItem<T>>> + 
 /// All tools must implement this trait to be usable in the system.
 #[async_trait]
 pub trait Tool: Send + Sync {
-    /// Input type for this tool (must be deserializable)
-    type Input: DeserializeOwned + Send + Sync;
+    /// Input type for this tool (must be serializable and deserializable)
+    type Input: Serialize + DeserializeOwned + Send + Sync;
 
     /// Output type for this tool (must be serializable)
     type Output: Serialize + Send + Sync;
