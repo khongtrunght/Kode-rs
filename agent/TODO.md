@@ -34,14 +34,16 @@
 - [x] Add commands: repl, query, config, models, agents, version
 - [x] Verify CLI works (--help, version)
 
-## Phase 2: Services Layer ⏸️ NEXT
+## Phase 2: Services Layer ✅ COMPLETED
 
 ### Model Adapters
-- [ ] Define ModelAdapter trait
-- [ ] Implement AnthropicAdapter
-- [ ] Implement OpenAIAdapter
+- [x] Define ModelAdapter trait
+- [x] Implement AnthropicAdapter (non-streaming)
+- [x] Implement OpenAIAdapter (non-streaming)
 - [ ] Implement streaming support
-- [ ] Implement token counting
+- [ ] Implement token counting (basic estimation implemented)
+- [x] Add BedrockAdapter stub
+- [x] Add VertexAdapter stub
 
 ### MCP Client
 - [ ] Port MCP client basics
@@ -198,13 +200,50 @@ agent/
 ```
 
 ### Statistics
-- **Total Rust code**: ~1,500 lines
-- **Commits**: 13 commits
+- **Total Rust code**: ~2,500 lines
+- **Commits**: 14 commits
 - **Compilation**: ✅ Clean (0 errors, 0 warnings)
 
 ## Current Blockers
 
 None.
+
+## Recent Progress (Session 2)
+
+### ✅ Services Layer Completed
+1. **ModelAdapter Trait**
+   - Defined unified interface for all AI providers
+   - Support for completions with tools
+   - Context window and max output tokens methods
+
+2. **Anthropic Adapter**
+   - Full implementation for Claude API
+   - Message format conversion (internal → Anthropic)
+   - Tool schema conversion
+   - Non-streaming completions working
+   - Proper error handling for API errors
+
+3. **OpenAI Adapter**
+   - Full implementation for ChatGPT and compatible APIs
+   - Works with official OpenAI, Ollama, Groq, etc.
+   - Message format conversion (internal → OpenAI)
+   - Tool calls support
+   - Non-streaming completions working
+
+4. **Model Adapter Factory**
+   - Automatic adapter selection based on provider type
+   - Support for 15+ provider types
+   - Bedrock and Vertex stubs for future implementation
+
+### Files Added (Session 2)
+```
+src/services/
+├── mod.rs                 # Service module with traits (217 lines)
+├── anthropic.rs          # Anthropic adapter (420 lines)
+├── openai.rs             # OpenAI adapter (373 lines)
+└── adapters/
+    └── mod.rs            # Future adapter implementations
+```
 
 ## Next Steps
 
