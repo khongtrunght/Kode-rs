@@ -53,9 +53,9 @@
 ## Phase 3: Core Tools (Priority 1) ⏸️ IN PROGRESS
 
 - [x] FileReadTool (with line range support)
-- [ ] FileWriteTool (create files)
-- [ ] FileEditTool (diff-based editing)
-- [ ] BashTool (command execution with streaming)
+- [x] FileWriteTool (create files with validation)
+- [x] FileEditTool (diff-based editing with uniqueness checks)
+- [x] BashTool (command execution with timeout and banned command checks)
 - [ ] GlobTool (file pattern matching)
 - [ ] GrepTool (content search with ripgrep-style)
 - [ ] lsTool (directory listing)
@@ -147,6 +147,43 @@
 - [ ] Set up GitHub Actions for CI/CD
 - [ ] Create binary releases
 - [ ] Publish to crates.io
+
+## Recent Progress (Session 3)
+
+### ✅ Core Tools Completed
+1. **FileWriteTool**
+   - File creation and overwriting
+   - Line ending detection and normalization
+   - Timestamp tracking for file freshness
+   - Validation requiring files to be read before write
+   - Full test coverage (4 tests passing)
+
+2. **FileEditTool**
+   - Exact string replacement with context requirements
+   - Uniqueness validation (must match exactly once)
+   - Snippet generation for showing edits
+   - Support for creating new files (empty old_string)
+   - Full test coverage (4 tests passing)
+
+3. **BashTool**
+   - Command execution with timeout support
+   - Banned command security checks
+   - Output truncation for large outputs
+   - Async execution with tokio
+   - Full test coverage (3 tests passing)
+
+### Files Added (Session 3)
+```
+src/tools/
+├── file_write.rs          # FileWriteTool (429 lines)
+├── file_edit.rs           # FileEditTool (610 lines)
+└── bash.rs                # BashTool (429 lines)
+```
+
+### Statistics (Session 3)
+- **New Rust code**: ~1,500 lines
+- **Commits**: 5 commits
+- **Tests**: 11 new tests (all passing)
 
 ## Current Progress Summary
 
