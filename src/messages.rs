@@ -1,4 +1,7 @@
 //! Message types for AI conversations
+//!
+//! This module defines the message types used in conversations with AI models.
+//! It includes user messages, assistant messages, progress messages, and tool use/result structures.
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -114,6 +117,21 @@ pub struct UserMessage {
     pub uuid: Uuid,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub options: Option<UserMessageOptions>,
+    /// Tool use result if this message contains tool results
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_use_result: Option<FullToolUseResult>,
+}
+
+/// Tool use result containing execution metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FullToolUseResult {
+    pub tool_use_id: String,
+    pub tool_name: String,
+    pub result: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_error: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
 }
 
 /// Options for user messages
@@ -147,9 +165,15 @@ pub struct AssistantMessage {
 /// Progress message during tool execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProgressMessage {
-    pub content: String,
+    pub content: AssistantMessage,
     pub tool_use_id: String,
     pub uuid: Uuid,
+    /// Normalized messages for context
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub normalized_messages: Option<Vec<Message>>,
+    /// Sibling tool use IDs executing concurrently
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sibling_tool_use_ids: Option<Vec<String>>,
 }
 
 /// Combined message type for the conversation
