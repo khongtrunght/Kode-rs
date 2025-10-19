@@ -61,80 +61,61 @@
 - **services/openai.rs**: OpenAI adapter (stub)
 - **services/mod.rs**: ModelAdapter trait defined
 
+## Recently Completed (Session 5) ✅
+
+### Agent Loader System
+- **src/agents/mod.rs** (567 lines)
+  - AgentConfig struct with full support for agent definitions
+  - YAML frontmatter parsing from markdown files
+  - Priority system: built-in < .claude(user) < .kode(user) < .claude(project) < .kode(project)
+  - AgentRegistry with async loading and caching
+  - File watching for hot reload using notify crate
+  - Built-in general-purpose agent as fallback
+  - Tool permissions: all tools (*) or specific tool list
+  - Optional model override support
+  - 6 comprehensive tests (all passing)
+
 ## Missing Critical Components ❌
 
 ### High Priority
 
-1. **Grep Tool** (CRITICAL for codebase search)
-   - Use `ripgrep` crate or `grep` crate
-   - Support regex patterns
-   - File type filtering
-   - Context lines (-A, -B, -C)
-   - Output modes (content, files, count)
+1. **REPL/TUI Implementation** (CRITICAL for user interaction)
+   - Message display with ratatui
+   - User input handling with crossterm
+   - Tool execution visualization
+   - Permission request UI
+   - Status indicators and progress display
+   - Syntax highlighting
 
-2. **Glob Tool** (CRITICAL for file finding)
-   - Use `walkdir` + `wildmatch` crates
-   - Support glob patterns
-   - Respect .gitignore
-   - Sort by modification time
-
-3. **Streaming Support in Anthropic Adapter**
+2. **Streaming Support in Anthropic Adapter**
    - Server-Sent Events (SSE) parsing
    - Stream content blocks incrementally
    - Handle partial tool use blocks
    - Error handling mid-stream
 
-4. **FileWriteTool Implementation**
-   - Write file to disk
-   - Create parent directories
-   - Backup existing files
-   - Validation (size limits, permissions)
-
-5. **FileEditTool Implementation**
-   - String replacement in files
-   - Line-based editing
-   - Diff generation
-   - Atomic updates
-
-6. **BashTool Implementation**
-   - Execute shell commands
-   - Capture stdout/stderr
-   - Timeout support
-   - Background process management
-   - Working directory tracking
+3. **Memory Tools**
+   - MemoryReadTool (read from conversation memory)
+   - MemoryWriteTool (persist important context)
+   - Memory storage backend (JSON or SQLite)
 
 ### Medium Priority
 
-7. **Agent Loader**
-   - Scan .kode/agents/ and .claude/agents/
-   - Parse YAML frontmatter from markdown
-   - LRU cache for agent definitions
-   - Hot reload support
-
-8. **TaskTool** (Agent orchestration)
+4. **TaskTool** (Agent orchestration)
    - Delegate to sub-agents
    - Manage agent lifecycle
    - Context passing
    - Result aggregation
 
-9. **TUI/REPL with Ratatui**
-   - Message display
-   - User input handling
-   - Syntax highlighting
-   - Progress indicators
-   - Tool use visualization
+5. **Context Management**
+   - MessageContextManager
+   - Token counting
+   - Smart truncation
+   - Context window management
 
-10. **OpenAI Adapter**
-    - OpenAI-compatible API
-    - Chat completion
-    - Streaming support
-    - Tool calling support
-
-11. **Context Management**
-    - MessageContextManager
-    - Token counting
-    - Smart truncation
-    - Context window management
+6. **Advanced Tools**
+   - ThinkTool (for reasoning)
+   - TodoWriteTool (task tracking)
+   - MultiEditTool (batch editing)
 
 ### Lower Priority
 
