@@ -50,9 +50,9 @@
 - [ ] Implement server discovery
 - [ ] Implement tool schema parsing
 
-## Phase 3: Core Tools (Priority 1)
+## Phase 3: Core Tools (Priority 1) ⏸️ IN PROGRESS
 
-- [ ] FileReadTool (with line range support)
+- [x] FileReadTool (with line range support)
 - [ ] FileWriteTool (create files)
 - [ ] FileEditTool (diff-based editing)
 - [ ] BashTool (command execution with streaming)
@@ -200,9 +200,10 @@ agent/
 ```
 
 ### Statistics
-- **Total Rust code**: ~2,500 lines
-- **Commits**: 14 commits
+- **Total Rust code**: ~3,000 lines
+- **Commits**: 16 commits
 - **Compilation**: ✅ Clean (0 errors, 0 warnings)
+- **Tests**: ✅ All passing (17 total)
 
 ## Current Blockers
 
@@ -243,7 +244,21 @@ src/services/
 ├── openai.rs             # OpenAI adapter (373 lines)
 └── adapters/
     └── mod.rs            # Future adapter implementations
+
+src/tools/
+└── file_read.rs          # FileReadTool implementation (453 lines)
 ```
+
+### ✅ First Tool Completed
+1. **FileReadTool**
+   - Full TypeScript feature parity
+   - Text file reading with line ranges (offset/limit)
+   - Image file reading (base64 encoded)
+   - File size validation (256KB max)
+   - Line truncation for long lines (>2000 chars)
+   - Line number formatting (cat -n style)
+   - 3 comprehensive tests (all passing)
+   - Proper error handling for missing files
 
 ## Next Steps
 
