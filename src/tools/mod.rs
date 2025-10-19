@@ -3,12 +3,14 @@
 //! Provides the core [`Tool`] trait and tool implementations for interacting with
 //! the codebase, file system, and external services.
 
+pub mod bash;
+pub mod file_edit;
 pub mod file_read;
 pub mod file_write;
-pub mod file_edit;
-pub mod bash;
 pub mod glob;
 pub mod grep;
+pub mod memory_read;
+pub mod memory_write;
 
 use std::{collections::HashMap, path::PathBuf, pin::Pin};
 
@@ -30,6 +32,9 @@ pub struct ToolContext {
 
     /// File read timestamps for tracking changes (milliseconds since UNIX_EPOCH)
     pub read_file_timestamps: HashMap<String, u128>,
+
+    /// Agent ID for context-specific operations (e.g., memory storage)
+    pub agent_id: Option<String>,
 }
 
 impl Default for ToolContext {
@@ -38,6 +43,7 @@ impl Default for ToolContext {
             cwd: std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")),
             safe_mode: false,
             read_file_timestamps: HashMap::new(),
+            agent_id: None,
         }
     }
 }
