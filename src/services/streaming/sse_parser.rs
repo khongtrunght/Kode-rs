@@ -2,8 +2,6 @@
 //!
 //! Parses SSE streams following the W3C spec and provider-specific formats.
 
-use std::collections::HashMap;
-
 /// SSE event
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SseEvent {

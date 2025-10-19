@@ -11,7 +11,6 @@ pub use anthropic_stream::AnthropicStreamHandler;
 pub use openai_stream::OpenAIStreamHandler;
 pub use sse_parser::{SseEvent, SseParser};
 
-use crate::messages::{AssistantMessage, ContentBlock, Message};
 use crate::services::Usage;
 use serde::{Deserialize, Serialize};
 
