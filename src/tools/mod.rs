@@ -11,6 +11,7 @@ pub mod glob;
 pub mod grep;
 pub mod memory_read;
 pub mod memory_write;
+pub mod think;
 
 use std::{collections::HashMap, path::PathBuf, pin::Pin};
 
