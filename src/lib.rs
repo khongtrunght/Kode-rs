@@ -6,6 +6,7 @@
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::module_name_repetitions, clippy::too_many_lines)]
 
+pub mod agents;
 pub mod cli;
 pub mod config;
 pub mod error;

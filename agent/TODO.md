@@ -326,23 +326,29 @@ src/tools/
    - 3 comprehensive tests (all passing)
    - Proper error handling for missing files
 
-## Next Steps
+## Next Steps (Current Session)
 
-1. **Implement services layer**
-   - Define ModelAdapter trait
-   - Implement AnthropicAdapter (using reqwest)
-   - Implement OpenAIAdapter
-   - Add streaming support
+1. **Implement Agent Loader System** (Priority 1)
+   - Parse markdown files with YAML frontmatter (using gray-matter equivalent)
+   - Scan .kode/agents and .claude/agents directories
+   - Priority system: built-in < .claude(user) < .kode(user) < .claude(project) < .kode(project)
+   - AgentConfig struct with agentType, whenToUse, tools, systemPrompt
+   - Agent registry with memoization/caching
+   - Hot reload with file watching (notify crate)
 
-2. **Implement first tool: FileReadTool**
-   - Input/output types
-   - Line range support
-   - File validation
-   - Tests
+2. **Implement Basic REPL/TUI** (Priority 1)
+   - Message display with ratatui
+   - Input handling with crossterm
+   - Tool execution visualization
+   - Permission request UI
+   - Status indicators
 
-3. **Implement core tools**
-   - FileWriteTool
-   - FileEditTool (with diff generation)
-   - BashTool (with streaming output)
-   - GlobTool (using wildmatch)
-   - GrepTool (using regex)
+3. **Implement TaskTool** (Priority 2)
+   - Agent orchestration and delegation
+   - Context passing between agents
+   - Result aggregation
+
+4. **Implement Streaming Support** (Priority 2)
+   - SSE parsing for Anthropic API
+   - Incremental content updates
+   - Stream error handling

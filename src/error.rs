@@ -74,6 +74,10 @@ pub enum KodeError {
     #[error("Agent not found: {0}")]
     AgentNotFound(String),
 
+    /// Agent load error
+    #[error("Agent load error: {0}")]
+    AgentLoadError(String),
+
     /// Permission denied
     #[error("Permission denied: {0}")]
     PermissionDenied(String),
