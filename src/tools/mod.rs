@@ -4,8 +4,9 @@
 //! the codebase, file system, and external services.
 
 pub mod file_read;
+pub mod file_write;
 
-use std::{collections::HashMap, pin::Pin};
+use std::{collections::HashMap, path::PathBuf, pin::Pin};
 
 use async_trait::async_trait;
 use futures::Stream;
@@ -17,30 +18,22 @@ use crate::{error::Result, messages::Message};
 /// Tool execution context
 #[derive(Debug, Clone)]
 pub struct ToolContext {
-    /// Unique message ID for this tool use
-    pub message_id: Option<String>,
-
-    /// Agent ID if running within an agent
-    pub agent_id: Option<String>,
+    /// Current working directory
+    pub cwd: PathBuf,
 
     /// Safe mode enabled (requires more permissions)
     pub safe_mode: bool,
 
-    /// File read timestamps for tracking changes
-    pub read_file_timestamps: HashMap<String, u64>,
-
-    /// Verbose output enabled
-    pub verbose: bool,
+    /// File read timestamps for tracking changes (milliseconds since UNIX_EPOCH)
+    pub read_file_timestamps: HashMap<String, u128>,
 }
 
 impl Default for ToolContext {
     fn default() -> Self {
         Self {
-            message_id: None,
-            agent_id: None,
+            cwd: std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")),
             safe_mode: false,
             read_file_timestamps: HashMap::new(),
-            verbose: false,
         }
     }
 }
@@ -49,19 +42,12 @@ impl Default for ToolContext {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationResult {
     /// Whether validation passed
-    pub result: bool,
+    #[serde(rename = "result")]
+    pub is_valid: bool,
 
     /// Optional error message
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
-
-    /// Optional error code
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error_code: Option<i32>,
-
-    /// Additional metadata
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub meta: Option<Value>,
 }
 
 impl ValidationResult {
@@ -69,10 +55,8 @@ impl ValidationResult {
     #[must_use]
     pub const fn ok() -> Self {
         Self {
-            result: true,
+            is_valid: true,
             message: None,
-            error_code: None,
-            meta: None,
         }
     }
 
@@ -80,21 +64,8 @@ impl ValidationResult {
     #[must_use]
     pub fn error(message: impl Into<String>) -> Self {
         Self {
-            result: false,
+            is_valid: false,
             message: Some(message.into()),
-            error_code: None,
-            meta: None,
-        }
-    }
-
-    /// Create a failed validation result with a message and code
-    #[must_use]
-    pub fn error_with_code(message: impl Into<String>, code: i32) -> Self {
-        Self {
-            result: false,
-            message: Some(message.into()),
-            error_code: Some(code),
-            meta: None,
         }
     }
 }
@@ -246,11 +217,11 @@ mod tests {
     #[test]
     fn test_validation_result() {
         let ok = ValidationResult::ok();
-        assert!(ok.result);
+        assert!(ok.is_valid);
         assert!(ok.message.is_none());
 
         let error = ValidationResult::error("something went wrong");
-        assert!(!error.result);
+        assert!(!error.is_valid);
         assert_eq!(error.message, Some("something went wrong".to_string()));
     }
 
@@ -258,7 +229,6 @@ mod tests {
     fn test_tool_context_default() {
         let ctx = ToolContext::default();
         assert!(!ctx.safe_mode);
-        assert!(!ctx.verbose);
-        assert!(ctx.message_id.is_none());
+        assert!(ctx.cwd.is_absolute());
     }
 }

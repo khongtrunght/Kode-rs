@@ -316,7 +316,7 @@ impl Tool for FileReadTool {
     async fn call(
         &self,
         input: Self::Input,
-        _context: ToolContext,
+        mut context: ToolContext,
     ) -> Result<ToolStream<Self::Output>> {
         let path = Self::normalize_path(&input.file_path);
         let offset = input.offset.unwrap_or(1);
@@ -324,6 +324,18 @@ impl Tool for FileReadTool {
 
         // Convert 1-indexed offset to 0-indexed
         let line_offset = if offset == 0 { 0 } else { offset - 1 };
+
+        // Update read timestamp
+        if let Ok(metadata) = fs::metadata(&path) {
+            if let Ok(modified) = metadata.modified() {
+                if let Ok(duration) = modified.duration_since(std::time::SystemTime::UNIX_EPOCH) {
+                    context.read_file_timestamps.insert(
+                        input.file_path.clone(),
+                        duration.as_millis(),
+                    );
+                }
+            }
+        }
 
         let output = if Self::is_image(&path) {
             let image = Self::read_image_content(&path)?;
@@ -379,7 +391,7 @@ mod tests {
 
         let ctx = ToolContext::default();
         let validation = tool.validate_input(&input, &ctx).await;
-        assert!(validation.result);
+        assert!(validation.is_valid);
 
         let mut stream = tool.call(input, ctx).await.unwrap();
         use futures::StreamExt;
@@ -442,7 +454,7 @@ mod tests {
 
         let ctx = ToolContext::default();
         let validation = tool.validate_input(&input, &ctx).await;
-        assert!(!validation.result);
+        assert!(!validation.is_valid);
         assert!(validation
             .message
             .unwrap()
