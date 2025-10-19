@@ -3,6 +3,8 @@
 //! Provides the core [`Tool`] trait and tool implementations for interacting with
 //! the codebase, file system, and external services.
 
+pub mod file_read;
+
 use std::{collections::HashMap, pin::Pin};
 
 use async_trait::async_trait;
