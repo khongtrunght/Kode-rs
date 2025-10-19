@@ -256,6 +256,16 @@ impl AnthropicStreamHandler {
     pub fn get_current_content(&self) -> &[ContentBlock] {
         &self.content_blocks
     }
+
+    /// Get the stop reason
+    pub fn get_stop_reason(&self) -> Option<String> {
+        self.stop_reason.clone()
+    }
+
+    /// Get accumulated usage statistics
+    pub fn get_usage(&self) -> Usage {
+        self.usage.clone()
+    }
 }
 
 impl Default for AnthropicStreamHandler {

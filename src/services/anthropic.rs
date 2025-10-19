@@ -6,6 +6,8 @@
 //! - Google Vertex AI
 
 use async_trait::async_trait;
+use bytes::Bytes;
+use futures::stream::{Stream, StreamExt};
 use reqwest::{header, Client};
 use serde::{Deserialize, Serialize};
 
@@ -15,7 +17,11 @@ use crate::{
     messages::{ContentBlock, Message, Role},
 };
 
-use super::{CompletionOptions, CompletionResponse, CompletionStream, ModelAdapter, ToolSchema, Usage};
+use super::{
+    streaming::AnthropicStreamHandler,
+    CompletionChunk, CompletionOptions, CompletionResponse, CompletionStream, ModelAdapter,
+    ToolSchema, Usage,
+};
 
 /// Anthropic API adapter
 pub struct AnthropicAdapter {
@@ -117,6 +123,82 @@ impl AnthropicAdapter {
             })
             .collect()
     }
+
+    /// Process SSE byte stream into CompletionChunks
+    fn process_stream(
+        byte_stream: impl Stream<Item = reqwest::Result<Bytes>> + Send + 'static,
+    ) -> impl Stream<Item = Result<CompletionChunk>> + Send + 'static {
+        async_stream::stream! {
+            let mut handler = AnthropicStreamHandler::new();
+            let mut byte_stream = Box::pin(byte_stream);
+
+            while let Some(chunk_result) = byte_stream.next().await {
+                match chunk_result {
+                    Ok(bytes) => {
+                        // Parse SSE events from bytes
+                        let text = match std::str::from_utf8(&bytes) {
+                            Ok(t) => t,
+                            Err(e) => {
+                                yield Err(KodeError::Other(format!("Invalid UTF-8 in stream: {}", e)));
+                                continue;
+                            }
+                        };
+
+                        // Process the chunk
+                        match handler.process_chunk(text) {
+                            Ok(done) => {
+                                if done {
+                                    break;
+                                }
+                            }
+                            Err(e) => {
+                                yield Err(e);
+                                break;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        yield Err(KodeError::NetworkError(e.to_string()));
+                        break;
+                    }
+                }
+            }
+
+            // Get final message and emit done event
+            match handler.get_message() {
+                Ok(assistant_message) => {
+                    // Extract content blocks from the message
+                    for block in &assistant_message.message.content {
+                        match block {
+                            ContentBlock::Text { text } => {
+                                yield Ok(CompletionChunk::TextDelta { text: text.clone() });
+                            }
+                            ContentBlock::Thinking { thinking } => {
+                                yield Ok(CompletionChunk::ThinkingDelta { thinking: thinking.clone() });
+                            }
+                            ContentBlock::ToolUse { id, name, input } => {
+                                yield Ok(CompletionChunk::ToolUseComplete {
+                                    id: id.clone(),
+                                    name: name.clone(),
+                                    input: input.clone(),
+                                });
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    // Emit done event with usage stats
+                    yield Ok(CompletionChunk::Done {
+                        stop_reason: handler.get_stop_reason().unwrap_or_else(|| "end_turn".to_string()),
+                        usage: Some(handler.get_usage()),
+                    });
+                }
+                Err(e) => {
+                    yield Err(e);
+                }
+            }
+        }
+    }
 }
 
 #[async_trait]
@@ -208,14 +290,48 @@ impl ModelAdapter for AnthropicAdapter {
 
     async fn stream_complete(
         &self,
-        _messages: Vec<Message>,
-        _tools: Vec<ToolSchema>,
-        _system_prompt: Option<String>,
-        _options: CompletionOptions,
+        messages: Vec<Message>,
+        tools: Vec<ToolSchema>,
+        system_prompt: Option<String>,
+        options: CompletionOptions,
     ) -> Result<CompletionStream> {
-        Err(KodeError::NotImplemented(
-            "Streaming not yet implemented".to_string(),
-        ))
+        let request = AnthropicRequest {
+            model: self.profile.model_name.clone(),
+            messages: self.convert_messages(messages),
+            system: system_prompt,
+            max_tokens: options.max_tokens.unwrap_or(8192),
+            temperature: options.temperature,
+            top_p: options.top_p,
+            stop_sequences: options.stop_sequences,
+            tools: if tools.is_empty() {
+                None
+            } else {
+                Some(self.convert_tools(tools))
+            },
+            stream: Some(true),
+        };
+
+        let response = self
+            .client
+            .post(format!("{}/v1/messages", self.base_url))
+            .json(&request)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await?;
+            return Err(KodeError::ApiError {
+                provider: "anthropic".to_string(),
+                message: format!("HTTP {}: {}", status, error_text),
+            });
+        }
+
+        // Create SSE parser and stream handler
+        let byte_stream = response.bytes_stream();
+        let stream = Self::process_stream(byte_stream);
+
+        Ok(Box::pin(stream))
     }
 
     fn max_context_tokens(&self) -> u32 {
